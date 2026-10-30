@@ -1,0 +1,16 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+        go: ['1.18.x', 'stable'] # lowest floor (Ubuntu 22.04) + current
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "${{ matrix.go }}" }
+      - run: go vet ./... && go test -race -count=1 ./...
+      - run: go build -buildmode=c-archive -trimpath -o /tmp/bami-core.a ./bridge

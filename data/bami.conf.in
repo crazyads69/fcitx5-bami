@@ -1,0 +1,7 @@
+[InputMethod]
+Name=Bami
+Icon=input-keyboard
+Label=Vi
+LangCode=vi
+Addon=bami
+Configurable=True

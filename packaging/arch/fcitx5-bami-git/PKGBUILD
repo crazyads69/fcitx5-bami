@@ -1,0 +1,35 @@
+# Maintainer: crazyads69 <leminhtri11a1@gmail.com>
+pkgname=fcitx5-bami-git
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc='Vietnamese input method for Fcitx 5 (Telex, VNI, VIQR) - git version'
+arch=(x86_64 aarch64)
+url='https://github.com/crazyads69/fcitx5-bami'
+license=(MIT)
+depends=(fcitx5)
+makedepends=(git cmake extra-cmake-modules go)
+provides=(fcitx5-bami)
+conflicts=(fcitx5-bami fcitx5-bamboo)
+source=("git+$url.git")
+sha256sums=(SKIP)
+
+pkgver() {
+  cd fcitx5-bami
+  printf '0.1.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cmake -S fcitx5-bami -B build -DCMAKE_BUILD_TYPE=None -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib
+  cmake --build build
+}
+
+check() {
+  ctest --test-dir build --output-on-failure
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 fcitx5-bami/LICENSE "$pkgdir/usr/share/licenses/fcitx5-bami/LICENSE"
+  install -Dm644 fcitx5-bami/THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/fcitx5-bami/THIRD_PARTY_NOTICES.md"
+}

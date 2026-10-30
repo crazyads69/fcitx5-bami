@@ -1,0 +1,15 @@
+Subject: Export SpellingTables for rule-generated corpus tests (new file only)
+
+Apply with: patch -p1 < this file (from the bamboo-core dir).
+
+--- a/spelling_export.go
++++ b/spelling_export.go
+@@ -0,0 +1,8 @@
++package bamboo
++
++// SpellingTables exposes copies of the syllable tables so tests can generate words from the rules.
++// first/vowel/last are space-separated rows; cv and vc say which rows may combine.
++func SpellingTables() (first, vowel, last []string, cv, vc [][]int) {
++	return append([]string(nil), firstConsonantSeqs...), append([]string(nil), vowelSeqs...),
++		append([]string(nil), lastConsonantSeqs...), cvMatrix, vcMatrix
++}

@@ -1,0 +1,29 @@
+Source: fcitx5-bami
+Section: utils
+Priority: optional
+Maintainer: crazyads69 <leminhtri11a1@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.22),
+               extra-cmake-modules,
+               pkg-config,
+               golang-go (>= 2:1.18~),
+               libfcitx5core-dev (>= 5.0.14),
+               libfcitx5config-dev,
+               libfcitx5utils-dev,
+               fcitx5-modules-dev,
+               fcitx5-modules,
+               fcitx5-data
+Standards-Version: 4.6.2
+Homepage: https://github.com/crazyads69/fcitx5-bami
+Rules-Requires-Root: no
+
+Package: fcitx5-bami
+Architecture: any
+Depends: fcitx5 (>= 5.0.14), ${shlibs:Depends}, ${misc:Depends}
+Conflicts: fcitx5-bamboo
+Description: Vietnamese input method for Fcitx 5 (Telex, VNI, VIQR)
+ Bami types Vietnamese with Telex variants, VNI, VIQR and the MS layout. It
+ edits the application's text through surrounding-text where that is provably
+ safe and falls back to preedit everywhere else (XIM, terminals, selections).
+ .
+ It embeds a Go runtime, so it cannot be loaded together with fcitx5-bamboo.

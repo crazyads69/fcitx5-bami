@@ -1,0 +1,86 @@
+From 881b1c8a4032bcfc09aed975e4c15e07e50b472c Mon Sep 17 00:00:00 2001
+From: fix <fix@local>
+Date: Fri, 30 Oct 2026 23:55:23 +0700
+Subject: [PATCH 2/3] =?UTF-8?q?Keep=20an=20undone=20lone=20key=20literal:?=
+ =?UTF-8?q?=20w,=20ww,=20www=20->=20=C6=B0,=20w,=20ww=20(Telex=20W=20/=20T?=
+ =?UTF-8?q?elex=202)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ bamboo.go             |  5 +++++
+ bamboo_utils.go       | 22 ++++++++++++++++++++++
+ regress_lonew_test.go | 14 ++++++++++++++
+ 3 files changed, 41 insertions(+)
+ create mode 100644 regress_lonew_test.go
+
+diff --git a/bamboo.go b/bamboo.go
+index f635f38..d98c0c0 100644
+--- a/bamboo.go
++++ b/bamboo.go
+@@ -191,6 +191,11 @@ func (e *BambooEngine) ProcessKey(key rune, mode Mode) {
+ 		e.composition = append(e.composition, newAppendingTrans(lowerKey, isUpperCase))
+ 		return
+ 	}
++	if isLiteralAfterUndo(e.composition, e.getApplicableRules(lowerKey), lowerKey) {
++		// w, ww, www -> ư, w, ww: an undone key stays literal
++		e.composition = append(e.composition, newAppendingTrans(lowerKey, isUpperCase))
++		return
++	}
+ 	e.composition = e.newComposition(e.composition, lowerKey, isUpperCase)
+ }
+ 
+diff --git a/bamboo_utils.go b/bamboo_utils.go
+index 41ddae0..7247a2f 100644
+--- a/bamboo_utils.go
++++ b/bamboo_utils.go
+@@ -519,3 +519,25 @@ func refreshLastToneTarget(composition []*Transformation, stdStyle bool) []*Tran
+ 	}
+ 	return transformations
+ }
++
++// isLiteralAfterUndo reports whether a lone-key rule (w -> ư) must stay literal:
++// the last appended key was already undone to its literal (ww), so www -> ww.
++func isLiteralAfterUndo(composition []*Transformation, rules []Rule, lowerKey rune) bool {
++	var lone bool
++	for _, r := range rules {
++		lone = lone || (r.EffectType == Appending && r.Key == lowerKey && r.EffectOn != lowerKey)
++	}
++	var last = findLastAppendingTrans(composition)
++	if !lone || last == nil || last.Rule.Key != lowerKey {
++		return false
++	}
++	if last.Rule.Result == lowerKey {
++		return true
++	}
++	for _, t := range composition {
++		if t.Target == last && t.Rule.EffectType == MarkTransformation && Mark(t.Rule.Effect) == MarkRaw {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/regress_lonew_test.go b/regress_lonew_test.go
+new file mode 100644
+index 0000000..92e06dd
+--- /dev/null
++++ b/regress_lonew_test.go
+@@ -0,0 +1,14 @@
++package bamboo
++
++import "testing"
++
++func TestRegressLoneW(t *testing.T) {
++	run(t, []rc{
++		{"w->ư", W, fNew, "w", "ư"}, {"ww->w", W, fNew, "ww", "w"}, {"www->ww", W, fNew, "www", "ww"},
++		{"wwww", W, fNew, "wwww", "www"}, {"wa", W, fNew, "wa", "ưa"}, {"tw", W, fNew, "tw", "tư"},
++		{"W", W, fNew, "W", "Ư"}, {"Ww", W, fNew, "Ww", "W"},
++		{"plain-telex-w-literal", T, fNew, "w", "w"}, {"plain-telex-ww", T, fNew, "ww", "ww"},
++		{"uw", W, fNew, "uw", "ư"}, {"ow", W, fNew, "ow", "ơ"}, {"aw", W, fNew, "aw", "ă"},
++		{"nhuw", W, fNew, "nhuw", "như"}, {"wuw-literal-after-undo", W, fNew, "uww", "uw"},
++	})
++}
+-- 
+2.56.0
+

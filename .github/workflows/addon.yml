@@ -1,0 +1,39 @@
+name: Addon
+on: [push, pull_request]
+jobs:
+  addon:
+    name: ${{ matrix.image }} / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['debian:12', 'ubuntu:22.04', 'ubuntu:24.04']
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.image }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential cmake extra-cmake-modules pkg-config golang-go \
+            libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev \
+            fcitx5-modules-dev fcitx5-modules fcitx5-data
+      - uses: actions/checkout@v4
+      - name: Versions
+        run: |
+          go version
+          cmake --version | head -1
+          g++ --version | head -1
+          dpkg -s libfcitx5core-dev | grep '^Version'
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: C++ translation unit includes the cgo header
+        run: |
+          printf '#include "bami-core.h"\nint main() { BamiInit(); return 0; }\n' > build/hdr.cpp
+          g++ -std=c++17 -Wall -Werror -Ibuild -c build/hdr.cpp -o build/hdr.o

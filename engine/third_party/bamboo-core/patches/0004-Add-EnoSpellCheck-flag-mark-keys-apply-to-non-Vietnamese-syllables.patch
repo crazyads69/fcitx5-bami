@@ -1,0 +1,55 @@
+Subject: Add EnoSpellCheck flag: mark keys apply to non-Vietnamese syllables (SpellCheck=off, DdAnywhere)
+
+bamboo-core has no way to turn the syllable validity gate off. EnoSpellCheck
+skips isValid in findMarkTarget and the uow shortcut; tone placement is unchanged.
+Apply with: patch -p1 < this file (from the bamboo-core dir).
+
+--- a/bamboo.go
++++ b/bamboo.go
+@@ -33,6 +33,8 @@
+ 	// EautoRestore restores the raw keys of a non-Vietnamese word (windows, text, Linux)
+ 	// when a word-break key (space, punctuation, digit) is typed after it.
+ 	EautoRestore
++	// EnoSpellCheck lets mark keys (aa, ow, dd...) apply even when the syllable is not Vietnamese.
++	EnoSpellCheck
+ 	EstdFlags = EfreeToneMarking | EstdToneStyle | EautoCorrectEnabled
+ )
+ 
+--- a/bamboo_utils.go
++++ b/bamboo_utils.go
+@@ -286,7 +286,7 @@
+ 	return previous, last[anchor:]
+ }
+ 
+-func findMarkTarget(composition []*Transformation, rules []Rule) (*Transformation, Rule) {
++func findMarkTarget(composition []*Transformation, rules []Rule, flags uint) (*Transformation, Rule) {
+ 	var str = Flatten(composition, VietnameseMode)
+ 	for i := len(composition) - 1; i >= 0; i-- {
+ 		var trans = composition[i]
+@@ -300,7 +300,7 @@
+ 					continue
+ 				}
+ 				var tmp = append(composition, &Transformation{Rule: rule, Target: target})
+-				if isValid(tmp, false) {
++				if flags&EnoSpellCheck != 0 || isValid(tmp, false) {
+ 					return target, rule
+ 				}
+ 			}
+@@ -333,7 +333,7 @@
+ 		}
+ 		return target, applicableRule
+ 	}
+-	return findMarkTarget(composition, applicableRules)
++	return findMarkTarget(composition, applicableRules, flags)
+ }
+ 
+ func generateUndoTransformations(composition []*Transformation, rules []Rule, flags uint) []*Transformation {
+@@ -424,7 +424,7 @@
+ 			return transformations
+ 		}
+ 		var newComp = append(composition, transformations...)
+-		if isValid(newComp, true) {
++		if flags&EnoSpellCheck != 0 || isValid(newComp, true) {
+ 			return transformations
+ 		}
+ 		// Implement the uow typing shortcut by creating a virtual

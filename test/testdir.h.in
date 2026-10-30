@@ -1,0 +1,4 @@
+#ifndef BAMI_TESTDIR_H
+#define BAMI_TESTDIR_H
+#define TESTING_BINARY_DIR "@CMAKE_BINARY_DIR@"
+#endif

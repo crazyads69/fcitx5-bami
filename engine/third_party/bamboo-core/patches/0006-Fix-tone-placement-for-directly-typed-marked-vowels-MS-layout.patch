@@ -1,0 +1,26 @@
+Subject: Tone placement: compare vowels as typed letters, not raw keys (fixes MS layout uyê: huyền, khuyên)
+
+In the MS layout ê is a directly typed key (3), so the EnglishMode flatten saw "uy3"
+and the uyê rule never matched; the tone went to y. Use VietnameseMode|MarkLess instead.
+Apply with: patch -p1 < this file (from the bamboo-core dir), after 0004.
+
+--- a/bamboo_utils.go
++++ b/bamboo_utils.go
+@@ -119,7 +119,7 @@
+ 			} else if stdStyle {
+ 				target = vowels[0]
+ 			} else {
+-				var str = Flatten(vowels, EnglishMode|LowerCase|ToneLess|MarkLess)
++				var str = Flatten(vowels, VietnameseMode|LowerCase|ToneLess|MarkLess)
+ 				if str == "oa" || str == "oe" || str == "uy" || str == "ue" || str == "uo" {
+ 					target = vowels[1]
+ 				} else {
+@@ -128,7 +128,7 @@
+ 			}
+ 		}
+ 	} else if len(vowels) == 3 {
+-		if Flatten(vowels, EnglishMode|LowerCase|ToneLess|MarkLess) == "uye" {
++		if Flatten(vowels, VietnameseMode|LowerCase|ToneLess|MarkLess) == "uye" {
+ 			target = vowels[2]
+ 		} else {
+ 			target = vowels[1]

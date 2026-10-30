@@ -1,0 +1,3 @@
+build/
+*.a
+bami-core.h
