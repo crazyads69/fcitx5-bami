@@ -1,0 +1,90 @@
+name: Bug Report
+description: File a bug report for fcitx5-bami
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+        Please do not include typed text or personal data in public issues.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of fcitx5-bami are you running?
+      placeholder: "e.g., 0.1.0, commit hash, or git describe output"
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and desktop
+      description: What OS, version, and desktop environment are you using?
+      placeholder: "e.g., Ubuntu 24.04 + GNOME 46 on Wayland"
+    validations:
+      required: true
+  - type: input
+    id: fcitx
+    attributes:
+      label: Fcitx version
+      description: Output of `fcitx5 --version`
+      placeholder: "e.g., 5.1.7"
+    validations:
+      required: true
+  - type: dropdown
+    id: frontend
+    attributes:
+      label: Frontend / application
+      description: Which frontend or application showed the problem?
+      options:
+        - GTK3 / GTK4 (Wayland)
+        - GTK3 / GTK4 (X11)
+        - Qt5 / Qt6 (Wayland)
+        - Qt5 / Qt6 (X11)
+        - Chromium / Chrome / Electron (Wayland)
+        - Chromium / Chrome / Electron (X11)
+        - Firefox (Wayland)
+        - Firefox (X11)
+        - Terminal (VTE / kitty / foot / Alacritty)
+        - LibreOffice
+        - xterm / other XIM
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: What exact keys did you type? What did you expect? What happened instead?
+      placeholder: |
+        1. Open application X
+        2. Switch to Bami (Telex)
+        3. Type: aa
+        4. Expected: â
+        5. Actual: a
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Bami configuration
+      description: Any non-default settings (Telex variant, English protection, preedit-only, etc.)
+      placeholder: |
+        - Typing method: Telex
+        - English protection: enabled
+        - Preedit only: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        If available, include sanitized Fcitx logs. Do not paste typed personal text.
+      render: shell
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](../../CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

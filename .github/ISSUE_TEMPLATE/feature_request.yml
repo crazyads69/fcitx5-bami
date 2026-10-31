@@ -1,0 +1,48 @@
+name: Feature Request
+description: Suggest an idea for fcitx5-bami
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or limitation
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: A clear description of what the limitation is.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the solution you'd like.
+      placeholder: A clear description of what you want to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any alternative solutions or features you've considered.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Which area does this feature touch?
+      options:
+        - Engine / typing rules
+        - Composition strategy (edit / preedit)
+        - English protection / prediction
+        - UI / panel / candidate window
+        - Packaging / installation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](../../CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

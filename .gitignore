@@ -1,4 +1,109 @@
+# ===== Build artifacts =====
 build/
 *.a
 bami-core.h
+
+# ===== Go =====
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+vendor/
+
+# ===== C / C++ =====
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.ko
+# Precompiled Headers
+*.gch
+*.pch
+# Static and dynamic libraries
+*.lai
+*.la
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# ===== Python =====
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+*.egg
+*.manifest
+*.spec
+
+# ===== CMake =====
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+Testing/
+_compile_commands.json
+compile_commands.json
+
+# ===== IDE / Editors =====
+# VS Code
+.vscode/
+# JetBrains / CLion
+.idea/
+*.iml
+# Vim
+*.swp
+*.swo
+*~
+# Emacs
+*~
+\#*\#
+.#*
+# Sublime Text
+*.sublime-*
+
+# ===== OS =====
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===== Container / Packaging =====
+*.tar
+*.tar.gz
+*.tar.bz2
+*.img
+*.qcow2
+
+# ===== Project-specific agent/tool outputs =====
+.claude/
+.claude/settings.local.json
+.codex/
+
+# ===== Test artifacts =====
+tmp/
+temp/
+*.log
+coverage.out
+coverage.html
+
+# ===== Staged installation =====
+stage/
+install/
