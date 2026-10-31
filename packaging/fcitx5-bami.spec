@@ -11,8 +11,12 @@ BuildRequires:  gcc-c++
 BuildRequires:  golang >= 1.18
 BuildRequires:  extra-cmake-modules
 BuildRequires:  pkgconfig
+BuildRequires:  pkgconfig(enchant-2)
+BuildRequires:  hunspell-en-US
 BuildRequires:  fcitx5-devel >= 5.0.14
 Requires:       fcitx5 >= 5.0.14
+Requires:       hunspell-en-US
+Requires:       glib2
 Conflicts:      fcitx5-bamboo
 
 %description
@@ -36,6 +40,9 @@ with fcitx5-bamboo.
 
 %files
 %license LICENSE THIRD_PARTY_NOTICES.md
+%{_bindir}/fcitx5-bami-init
+%{_datadir}/systemd/user/fcitx5-bami-init.service
+%{_datadir}/fcitx5/bami/profiles/bami-panel.conf
 %{_libdir}/fcitx5/libbami.so
 %{_datadir}/fcitx5/addon/bami.conf
 %{_datadir}/fcitx5/inputmethod/bami.conf

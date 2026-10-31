@@ -2,14 +2,18 @@
 //
 // C API (generated header: libbami.h / whatever -o names). All functions recover Go panics (R7).
 //
-//	void      BamiInit(void);                      // once per process; ignores SIGPIPE
+//	void      BamiInit(void);                      // once per process; no-op, kept for ABI
 //	uintptr_t BamiNew(int variant, int toneStyle, unsigned flags);   // 0 on failure
 //	void      BamiConfigure(uintptr_t h, int variant, int toneStyle, unsigned flags); // also resets the word
 //	void      BamiFree(uintptr_t h);               // h is invalid afterwards
 //	void      BamiReset(uintptr_t h);              // drop the word, produce no text
 //	int       BamiKey(uintptr_t h, unsigned ch, int *deleteN, char **insert, char **preedit);
 //	int       BamiBackspace(uintptr_t h, int *deleteN, char **insert, char **preedit);
+//	int       BamiBackspaceRaw(uintptr_t h, int *deleteN, char **insert, char **preedit);
 //	char     *BamiCommit(uintptr_t h);             // final word text (AutoRestore applied), resets; NULL on error
+//	char     *BamiRaw(uintptr_t h);                // original keys; caller frees
+//	double    BamiEnglishScore(uintptr_t h);        // local score; -1 invalid handle
+//	double    BamiEnglishThreshold(void);           // validation-selected threshold
 //	char     *BamiPreedit(uintptr_t h);            // current composed word; NULL on error
 //	void      BamiFreeString(char *s);             // NULL-safe
 //	void      BamiAckShown(uintptr_t h, const char *shown);
@@ -44,10 +48,10 @@ typedef const char bami_cchar;
 import "C"
 
 import (
-	"os/signal"
+	"runtime"
 	"runtime/cgo"
+	"runtime/debug"
 	"sync"
-	"syscall"
 	"unsafe"
 
 	"github.com/crazyads69/fcitx5-bami/engine"
@@ -75,7 +79,13 @@ func opts(toneStyle C.int, flags C.uint) engine.Options {
 func get(h C.uintptr_t) *state { return cgo.Handle(h).Value().(*state) }
 
 //export BamiInit
-func BamiInit() { signal.Ignore(syscall.SIGPIPE) }
+func BamiInit() {
+	// Leave the host's signal dispositions alone (Go never writes to a pipe). The engine is serial and
+	// small: 2 Ps keep the added thread count low and a 400% GC target cuts collections ~4x.
+	// shortcut: no SetMemoryLimit, the embedded English model makes a tight limit risk GC thrashing.
+	runtime.GOMAXPROCS(2)
+	debug.SetGCPercent(400)
+}
 
 //export BamiNew
 func BamiNew(variant, toneStyle C.int, flags C.uint) (h C.uintptr_t) {
@@ -162,7 +172,16 @@ func BamiKey(h C.uintptr_t, ch C.uint, deleteN *C.int, insert, preedit **C.char)
 }
 
 //export BamiBackspace
-func BamiBackspace(h C.uintptr_t, deleteN *C.int, insert, preedit **C.char) (ret C.int) {
+func BamiBackspace(h C.uintptr_t, deleteN *C.int, insert, preedit **C.char) C.int {
+	return backspace(h, false, deleteN, insert, preedit)
+}
+
+//export BamiBackspaceRaw
+func BamiBackspaceRaw(h C.uintptr_t, deleteN *C.int, insert, preedit **C.char) C.int {
+	return backspace(h, true, deleteN, insert, preedit)
+}
+
+func backspace(h C.uintptr_t, raw bool, deleteN *C.int, insert, preedit **C.char) (ret C.int) {
 	defer func() {
 		if recover() != nil {
 			zeroOut(deleteN, insert, preedit)
@@ -179,7 +198,13 @@ func BamiBackspace(h C.uintptr_t, deleteN *C.int, insert, preedit **C.char) (ret
 			ret = -1
 		}
 	}()
-	ed, ok := s.e.Backspace()
+	var ed engine.Edit
+	var ok bool
+	if raw {
+		ed, ok = s.e.BackspaceRaw()
+	} else {
+		ed, ok = s.e.Backspace()
+	}
 	report(s, ed, deleteN, insert, preedit)
 	if ok {
 		return 1
@@ -212,6 +237,35 @@ func BamiPreedit(h C.uintptr_t) (out *C.char) {
 	defer s.mu.Unlock()
 	return C.CString(s.e.Preedit())
 }
+
+//export BamiRaw
+func BamiRaw(h C.uintptr_t) (out *C.char) {
+	defer func() {
+		if recover() != nil {
+			out = nil
+		}
+	}()
+	s := get(h)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return C.CString(s.e.Raw())
+}
+
+//export BamiEnglishScore
+func BamiEnglishScore(h C.uintptr_t) (score C.double) {
+	defer func() {
+		if recover() != nil {
+			score = -1
+		}
+	}()
+	s := get(h)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return C.double(s.e.PredictEnglish())
+}
+
+//export BamiEnglishThreshold
+func BamiEnglishThreshold() C.double { return C.double(engine.EnglishThreshold()) }
 
 //export BamiFreeString
 func BamiFreeString(p *C.char) {

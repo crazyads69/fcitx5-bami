@@ -18,8 +18,12 @@ include(FeatureSummary)
 find_package(Fcitx5Core ${REQUIRED_FCITX_VERSION} REQUIRED)
 find_package(Fcitx5Config REQUIRED)
 find_package(Fcitx5Utils REQUIRED)
-find_package(Fcitx5Module REQUIRED COMPONENTS TestFrontend)
+if(BUILD_TESTING)
+  find_package(Fcitx5Module REQUIRED COMPONENTS TestFrontend)
+endif()
 find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(Enchant REQUIRED IMPORTED_TARGET enchant-2)
 find_program(GO_EXECUTABLE go REQUIRED)
 include("${FCITX_INSTALL_CMAKECONFIG_DIR}/Fcitx5Utils/Fcitx5CompilerSettings.cmake")
 
@@ -33,6 +37,7 @@ set(BAMI_GO_DIR ${CMAKE_BINARY_DIR}/go)
 add_custom_command(
   OUTPUT ${CMAKE_BINARY_DIR}/bami-core.a ${CMAKE_BINARY_DIR}/bami-core.h
   DEPENDS ${BAMI_GO_SRCS} ${CMAKE_SOURCE_DIR}/go.mod
+          ${CMAKE_SOURCE_DIR}/engine/models/english-v1.bin
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   # GOCACHE/GOPATH inside the build tree: packaging sandboxes have no writable $HOME.
   COMMAND ${CMAKE_COMMAND} -E env CGO_ENABLED=1 CC=${CMAKE_C_COMPILER}

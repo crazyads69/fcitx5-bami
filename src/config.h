@@ -36,6 +36,18 @@ FCITX_CONFIGURATION(
     fcitx::Option<bool> freeTone{this, "FreeTone", _("Free tone mark placement"), true};
     fcitx::Option<bool> spellCheck{this, "SpellCheck", _("Only transform possible Vietnamese syllables"), false};
     fcitx::Option<bool> ddAnywhere{this, "DdAnywhere", _("dd always types đ"), false};
+    fcitx::Option<bool> clientPreedit{this, "ClientPreedit",
+        _("Show composition inside the application (off: Fcitx panel)"), true};
+    fcitx::Option<bool> preeditOnly{this, "PreeditOnly",
+        _("Use preedit only (never delete application text)"), false};
+    fcitx::Option<bool> protectEnglish{this, "ProtectEnglish",
+                                      _("Keep recognized English words unchanged"), true};
+    fcitx::Option<bool> englishModel{this, "EnglishModel",
+                                    _("Use local English prediction model (Telex)"), true};
+    fcitx::Option<bool> learnCorrections{this, "LearnCorrections",
+        _("Remember language corrections in this input context (memory only)"), true};
+    fcitx::Option<std::string> englishDictionary{this, "EnglishDictionary",
+                                               _("English dictionary"), "en_US"};
     fcitx::Option<bool> restore{this, "RestoreNonVietnamese",
                                 _("Restore raw keys of non-Vietnamese words at word end"), false};
     fcitx::Option<bool> underlinePreedit{this, "UnderlinePreedit",

@@ -10,3 +10,7 @@ override_dh_auto_configure:
 # dh runs ctest for cmake builds; keep it explicit so a skipped test is a decision.
 override_dh_auto_test:
 	dh_auto_test
+
+# Session warm-up is opt-in, including when installed from a Debian package.
+override_dh_installsystemduser:
+	dh_installsystemduser --no-enable

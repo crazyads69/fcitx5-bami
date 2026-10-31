@@ -14,7 +14,7 @@
 | 3 | SimpleTelex1 | Unikey Simple Telex: w only marks a vowel | off, locked | off, locked |
 | 4 | SimpleTelex2 | Unikey Simple Telex 2: lone w -> ư, no brackets | everywhere, locked | off, locked |
 | 5 | VNI | bamboo "VNI" | - | - |
-| 6 | VIQR | bamboo "VIQR" (no `\` escape) | - | - |
+| 6 | VIQR | bamboo "VIQR" (single-character `\` escape) | - | - |
 | 7 | MS | bamboo "Microsoft layout": digits type marked letters; `[` -> ư, `]` -> ơ (swapped vs Telex) | - | - |
 | 8 | TelexVNI | bamboo "Telex + VNI" | off | off |
 
@@ -36,7 +36,7 @@ The gates add rules to the base table (`w` += `__Ư`, bracket keys), so "Telex2"
 ## Go API
 
 `New(v, opts)`, `Configure`, `Key(rune) (Edit, consumed)`, `Backspace() (Edit, consumed)`, `Commit() string`, `Reset()`,
-`Preedit()`, `AckShown(s)`. `Edit{DeleteN runes, Insert}` is computed with `Diff` against the last REPORTED preedit
+`Preedit()`, `Raw()`, `PredictEnglish()`, `AckShown(s)`. `Edit{DeleteN runes, Insert}` is computed with `Diff` against the last REPORTED preedit
 (`AckShown` overrides that baseline). Not consumed = the engine ignores the key (space, punctuation, a digit/tone key at
 the start of a word, a key outside the variant): Commit the word, then pass the key on. Backspace removes the last composed
 char (`vieetj`,BS -> `việ`; PRD F8). Break keys never reach bamboo, so AutoRestore runs in `Commit`.
@@ -74,6 +74,37 @@ void      BamiAckShown(uintptr_t h, const char *shown);     // header spells it 
 
 ## Known limits
 
-* VIQR `\` escape and MS alternate tone keys (`%^&*(`) are not implemented.
+* VIQR supports single-character backslash escaping, not VIQR stream-mode directives.
+* MS supports shifted tone aliases `% ^ & * (` alongside digits `5 6 7 8 9`.
 * English words that look Vietnamese (test1.c -> tét1.c) need a front-end dictionary.
 * The bamboo spelling tables are lenient: `dd` is never refused, so DdAnywhere only matters with AutoRestore.
+
+## Local English prediction and C ABI additions
+
+`Engine.Raw()` retains original consumed keys, including Quick Telex inputs.
+After Backspace it describes the remaining edited word using the core's retained
+keys. It is not a permanent keyboard log: reset/configuration/commit erase it.
+`EnglishScore(word)` evaluates the embedded hashed character-ngram logistic
+model; `EnglishThreshold()` returns its validation threshold.
+`Engine.PredictEnglish()` returns a neutral score for non-Telex layouts.
+
+The C API adds `char *BamiRaw(uintptr_t h)`, `double BamiEnglishScore(uintptr_t h)`,
+and `double BamiEnglishThreshold(void)`. Raw strings follow the same ownership
+rules as BamiPreedit; NULL denotes an invalid handle. Scores are in [0,1], with
+-1 for an invalid handle, and are not calibrated probabilities of user intent.
+The C++ composer selects dictionary English or model English before BamiCommit
+resets the core; Shift+Backspace selects the other candidate. The policy is local
+to the addon, leaving the pure-Go engine's existing Commit contract unchanged.
+
+See [ENGLISH.md](ENGLISH.md) for training, metrics, data provenance, and limits.
+
+## Displayed English Backspace
+
+`Engine.BackspaceRaw()` / `BamiBackspaceRaw` remove one original key and rebuild
+its Vietnamese alternative. The C function uses the same output ownership and
+error contract as BamiBackspace. The composer uses it only when an English raw
+candidate is displayed; ordinary Vietnamese Backspace is unchanged. Word choice
+is applied to the preview as well as at commit, so frontend auto-commits see
+the selected language; native client focus-out delivery is still subject to the
+limits documented in LIMITS.md. Explicit corrections can be retained in bounded memory
+per input context; see ENGLISH.md.

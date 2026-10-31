@@ -50,7 +50,15 @@ public:
     void keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev) override {
         auto *ic = ev.inputContext();
         if (ev.isRelease()) return;
-        if (ic->capabilityFlags().test(fcitx::CapabilityFlag::PasswordOrSensitive)) return;
+        if (ic->capabilityFlags().test(fcitx::CapabilityFlag::PasswordOrSensitive)) {
+            composer_.onReset(ic); // a word composed before the field turned sensitive must not reach it
+            return;
+        }
+        if (ic->capabilityFlags().testAny(fcitx::CapabilityFlags{
+                fcitx::CapabilityFlag::Url, fcitx::CapabilityFlag::Email})) {
+            composer_.onFlush(ic);
+            return;
+        }
         const fcitx::Key key = ev.key();
         const fcitx::KeyStates mods = key.states() & fcitx::KeyStates{fcitx::KeyState::Ctrl, fcitx::KeyState::Alt,
                                                                        fcitx::KeyState::Super};
@@ -60,7 +68,10 @@ public:
             return;
         }
         if (key.sym() == FcitxKey_BackSpace) {
-            if (composer_.onBackspace(ic)) ev.filterAndAccept();
+            // Normalized Backspace drops Shift on older Fcitx; retain the raw modifier.
+            bool consumed = ev.rawKey().states().test(fcitx::KeyState::Shift)
+                                ? composer_.onAlternate(ic) : composer_.onBackspace(ic);
+            if (consumed) ev.filterAndAccept();
             return;
         }
         uint32_t rune = fcitx::Key::keySymToUnicode(key.sym());

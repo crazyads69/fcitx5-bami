@@ -373,3 +373,104 @@ func TestUndoAndEscape(t *testing.T) { // double key undoes its effect; AutoRest
 		}
 	}
 }
+
+func TestRaw(t *testing.T) {
+	for _, keys := range []string{"as", "test", "windows", "Tieengs", "vieetj"} {
+		e := New(Telex, stdOpts)
+		for _, k := range keys {
+			e.Key(k)
+		}
+		if got := e.Raw(); got != keys {
+			t.Errorf("Raw(%q) = %q", keys, got)
+		}
+		e.Reset()
+		if e.Raw() != "" {
+			t.Fatal("Reset retained raw text")
+		}
+	}
+	e := New(Telex, stdOpts)
+	e.Key('a')
+	e.Key('s')
+	e.Backspace()
+	if e.Raw() != "" {
+		t.Fatalf("Backspace left raw text: %q", e.Raw())
+	}
+}
+
+func TestRawQuickTelex(t *testing.T) {
+	e := New(Telex, Options{QuickTelex: true})
+	for _, k := range "access" {
+		e.Key(k)
+	}
+	if got := e.Raw(); got != "access" {
+		t.Fatalf("Quick Telex lost input: %q", got)
+	}
+	if e.Raw() == e.Preedit() {
+		t.Fatal("test did not exercise a transformation")
+	}
+}
+
+func TestBackspaceRaw(t *testing.T) {
+	e := New(Telex, stdOpts)
+	e.Key('a')
+	e.Key('s')
+	e.AckShown("as")
+	ed, ok := e.BackspaceRaw()
+	if !ok || Apply("as", ed) != "a" || e.Raw() != "a" || e.Preedit() != "a" {
+		t.Fatalf("English Backspace: %+v, %q, %q", ed, e.Raw(), e.Preedit())
+	}
+	e.BackspaceRaw()
+	if _, ok := e.BackspaceRaw(); ok {
+		t.Fatal("consumed empty Backspace")
+	}
+}
+
+func TestVIQREscape(t *testing.T) {
+	for keys, want := range map[string]string{
+		`a\.`: "a.", `a\'`: "a'", `a\?`: "a?", `a\^`: "a^", `a\(`: "a(",
+		`a\\`: `a\`, `\d`: "d", `a\`: `a\`, `a.`: "ạ",
+	} {
+		if got := typeKeys(t, VIQR, Options{FreeTone: true}, keys); got != want {
+			t.Errorf("VIQR %q -> %q, want %q", keys, got, want)
+		}
+	}
+	e := New(VIQR, Options{})
+	e.Key('a')
+	e.Key('\\')
+	e.Backspace()
+	e.Key('.')
+	if e.Preedit() != "ạ" {
+		t.Fatalf("escape state survived Backspace: %q", e.Preedit())
+	}
+	e.Reset()
+	e.Key('\\')
+	e.Reset()
+	e.Key('a')
+	e.Key('.')
+	if e.Preedit() != "ạ" {
+		t.Fatal("escape state survived Reset")
+	}
+}
+
+func TestMSShiftedTones(t *testing.T) {
+	for _, pair := range []string{"5%", "6^", "7&", "8*", "9("} {
+		a := typeKeys(t, MS, Options{FreeTone: true}, "a"+pair[:1])
+		b := typeKeys(t, MS, Options{FreeTone: true}, "a"+pair[1:])
+		if a != b || a == "a" {
+			t.Errorf("MS keys %q disagree: %q / %q", pair, a, b)
+		}
+	}
+}
+
+func TestVIQREscapeRejectsInvalidRunes(t *testing.T) {
+	e := New(VIQR, Options{})
+	e.Key('\\')
+	for _, r := range []rune{0, '\n', 0x7f, 0xd800, 0x110000, -1} {
+		if _, ok := e.Key(r); ok {
+			t.Fatalf("escaped invalid rune accepted: %U", r)
+		}
+		if e.Preedit() != "\\" {
+			t.Fatal("invalid key modified composition")
+		}
+	}
+}

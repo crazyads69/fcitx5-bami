@@ -8,6 +8,8 @@
 
 package bamboo
 
+import "strings"
+
 var firstConsonantSeqs = []string{
 	"b d đ g gh m n nh p ph r s t tr v z",
 	"c h k kh qu th",
@@ -54,23 +56,33 @@ var vcMatrix = [][]int{
 	{4},
 }
 
-func lookup(seq []string, input string, inputIsFull, inputIsComplete bool) []int {
+// splitSeqs splits the space-separated syllable rows once, so lookup() does no per-key conversion.
+func splitSeqs(seq []string) [][][]rune {
+	out := make([][][]rune, len(seq))
+	for i, row := range seq {
+		for _, f := range strings.Fields(row) {
+			out[i] = append(out[i], []rune(f))
+		}
+	}
+	return out
+}
+
+var (
+	firstConsonantRunes = splitSeqs(firstConsonantSeqs)
+	vowelRunes          = splitSeqs(vowelSeqs)
+	lastConsonantRunes  = splitSeqs(lastConsonantSeqs)
+)
+
+func lookup(seq [][][]rune, input string, inputIsFull, inputIsComplete bool) []int {
 	var ret []int
-	var inputLen = len([]rune(input))
+	in := []rune(input)
 	for index, row := range seq {
-		var i = 0
-		var rows = append([]rune(row), ' ')
-		for j, char := range rows {
-			if char != ' ' {
-				continue
-			}
-			var canvas = rows[i:j]
-			i = j + 1
-			if len(canvas) < inputLen || (inputIsFull && len(canvas) > inputLen) {
+		for _, canvas := range row {
+			if len(canvas) < len(in) || (inputIsFull && len(canvas) > len(in)) {
 				continue
 			}
 			var isMatch = true
-			for k, ic := range []rune(input) {
+			for k, ic := range in {
 				if ic != canvas[k] && !(!inputIsComplete && AddMarkToTonelessChar(canvas[k], 0) == ic) {
 					isMatch = false
 					break
@@ -90,17 +102,17 @@ func isValidCVC(fc, vo, lc string, inputIsFullComplete bool) bool {
 	var fcIndexes, voIndexes, lcIndexes []int
 	// log.Printf("fc=%s vo=%s lc=%s ret=%v", fc, vo, lc, ret)
 	if fc != "" {
-		if fcIndexes = lookup(firstConsonantSeqs, fc, inputIsFullComplete || vo != "", true); fcIndexes == nil {
+		if fcIndexes = lookup(firstConsonantRunes, fc, inputIsFullComplete || vo != "", true); fcIndexes == nil {
 			return false
 		}
 	}
 	if vo != "" {
-		if voIndexes = lookup(vowelSeqs, vo, inputIsFullComplete || lc != "", inputIsFullComplete); voIndexes == nil {
+		if voIndexes = lookup(vowelRunes, vo, inputIsFullComplete || lc != "", inputIsFullComplete); voIndexes == nil {
 			return false
 		}
 	}
 	if lc != "" {
-		if lcIndexes = lookup(lastConsonantSeqs, lc, inputIsFullComplete, true); lcIndexes == nil {
+		if lcIndexes = lookup(lastConsonantRunes, lc, inputIsFullComplete, true); lcIndexes == nil {
 			return false
 		}
 	}

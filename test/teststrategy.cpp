@@ -101,10 +101,32 @@ int main() {
         in = healthy(f); in.cursor = in.anchor = in.expectedCursor = 99; d = decide(in);
         CHECK(d.reason == Reason::Range);
     }
+    // Every frontend must reject a cursor outside its cached text.
+    for (auto f : {FrontendKind::DBus, FrontendKind::IBus, FrontendKind::Other}) {
+        auto in = healthy(f);
+        in.cursor = in.anchor = in.expectedCursor = 99;
+        CHECK(decide(in).reason == Reason::Range);
+        in.shown.clear();
+        CHECK(decide(in).mode == Mode::Preedit);
+    }
     // The same long text is fine on dbus (only the Wayland byte conversion is the risk).
     { auto in = healthy(); in.text = std::string(kWaylandMaxText, 'a') + " Tie";
       in.cursor = in.anchor = in.expectedCursor = static_cast<unsigned>(in.text.size());
       CHECK(decide(in).mode == Mode::Edit); }
+    // Malformed UTF-8 must never provide evidence for a surrounding-text delete.
+    for (const std::string &bad : {std::string("\x80"), std::string("\xC0\xAF"),
+         std::string("\xE0\x80\xAF"), std::string("\xED\xA0\x80"),
+         std::string("\xF4\x90\x80\x80"), std::string("\xE1\xBA"), std::string(1, '\0')}) {
+        auto in = healthy(); in.text = bad + " Tie";
+        CHECK(decide(in).reason == Reason::InvalidText);
+        CHECK(decide(in).makeSticky);
+    }
+    // Joining/format characters, ideographic letters, and combining marks are not punctuation.
+    for (const std::string prefix : {"\xE2\x80\x8D", "\xE2\x80\xAA", "\xE3\x80\x85", "\xE3\x80\xAA"}) {
+        auto in = healthy(); in.text = prefix + "Tie";
+        in.cursor = in.anchor = in.expectedCursor = 4;
+        CHECK(decide(in).reason == Reason::NotBoundary);
+    }
     // Helpers.
     CHECK(utf8Length("Ti\xE1\xBA\xBFng") == 5);
     CHECK(utf8Prefix("Ti\xE1\xBA\xBFng", 3) == "Ti\xE1\xBA\xBF");

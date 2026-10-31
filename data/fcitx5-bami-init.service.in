@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT
+[Unit]
+Description=Initialize Bami in the existing Fcitx desktop session
+After=dbus.socket
+PartOf=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart="@CMAKE_INSTALL_FULL_BINDIR@/fcitx5-bami-init"
+RemainAfterExit=yes
+TimeoutStopSec=5
+
+[Install]
+WantedBy=graphical-session.target

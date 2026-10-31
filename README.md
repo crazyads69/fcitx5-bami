@@ -3,7 +3,8 @@
 A Vietnamese input method for [Fcitx 5](https://fcitx-im.org): Telex (several
 variants), VNI, VIQR and the MS layout. MIT licensed. The typing engine is Go
 (vendored [bamboo-core](engine/third_party/bamboo-core), patched) linked into a
-small C++ addon.
+small C++ addon. English protection uses the system Enchant dictionary and a
+small embedded local model; no text is sent to a service.
 
 What makes it different from other Fcitx Vietnamese IMs is how it puts text in
 the application. For each keystroke it picks one of two strategies:
@@ -36,12 +37,12 @@ At most one delete per key, issued before the commit. There are no timers.
 ## Build
 
 Needs Fcitx 5.0.14 or newer (Ubuntu 22.04 and later, Debian 12 and later), CMake
-3.22, a C++17 compiler and Go 1.18+.
+3.22, a C++17 compiler, Go 1.18+, Enchant 2 and an English dictionary.
 
 ```sh
 # Debian / Ubuntu
 sudo apt install build-essential cmake extra-cmake-modules pkg-config golang-go \
-  libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev \
+  libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev libenchant-2-dev hunspell-en-us \
   fcitx5-modules-dev fcitx5-modules fcitx5-data
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
@@ -56,14 +57,15 @@ process-wide symbol table. Files installed: `<libdir>/fcitx5/libbami.so`,
 
 Packaging recipes are in `packaging/`: Debian (`cp -r packaging/debian . && dpkg-buildpackage -us -uc`),
 RPM (`fcitx5-bami.spec`), Arch (`arch/fcitx5-bami`, `arch/fcitx5-bami-git`). All run
-the tests in their check phase; none ships a postinst, udev rule or systemd unit.
+the tests in their check phase; none ships a udev rule or enables the optional session initializer automatically.
 
 ## Use
 
 Restart Fcitx (`fcitx5 -r`), open `fcitx5-configtool`, add **Bami** to the input
 method list. Options (Typing method, tone placement, lone `w`, brackets, Quick
 Telex, restore non-Vietnamese words, underline the preedit) are on its configure
-page; changes apply from the next keystroke.
+page; changes apply on the next context event, finishing the current word first
+so already typed text is preserved.
 
 Environment variables for the application side (set in your session, e.g.
 `~/.config/environment.d/fcitx.conf` or `/etc/environment`):
@@ -78,6 +80,43 @@ Environment variables for the application side (set in your session, e.g.
 
 These are the common settings, not a tested matrix: see "Not verified".
 
+## Mixed English and Vietnamese
+
+English protection is enabled by default. While composing and when committing, Bami prefers the original
+keys when the configured English dictionary recognizes them. For Telex layouts,
+a local character-ngram model can also recognize English words missing from the
+dictionary. Predictions update the displayed candidate as you type. Python
+and NumPy are only needed to retrain the bundled model.
+
+Before ending the current word, press **Shift+Backspace** to commit the other
+interpretation, without inserting a space. For example:
+
+| Keys | Normal ending | Shift+Backspace |
+| --- | --- | --- |
+| `as` | `as` | `á` |
+| `vieetj` | `việt` | `vieetj` |
+| `typescript` | `typescript` | composed Vietnamese interpretation |
+
+Options: **Keep recognized English words unchanged** (`ProtectEnglish`),
+**Use local English prediction model (Telex)** (`EnglishModel`), and
+**English dictionary** (`EnglishDictionary`, default `en_US`; e.g. `en_GB`).
+Disable the model for dictionary-only behavior, or disable English protection
+for the original Vietnamese-first behavior. An unavailable dictionary logs a
+warning; the local model and manual override remain available.
+
+The preview follows the selected language, so auto-commit sees that choice.
+Some native Wayland clients still discard pending preedit on focus changes;
+[the tested frontend fallback](docs/LIMITS.md) addresses the observed cases.
+Backspace removes one displayed English key or one composed Vietnamese character.
+`LearnCorrections` remembers explicit overrides in bounded memory for the current
+input context; settings changes clear them. Disable it for independent decisions.
+Enable **Use preedit only** (`PreeditOnly=True`) to forbid application-text deletes
+in clients with unreliable updates. An unsafe surrounding-text edit is never
+forced, even by the override shortcut.
+Apps that advertise URL/email fields are passed through without composing.
+Unknown identifiers and genuine bilingual collisions still need an explicit
+choice. See [the model and Linux integration research](docs/ENGLISH.md).
+
 ## Do not run it with fcitx5-bamboo
 
 Both embed a Go runtime. bami refuses to start when `fcitx5-bamboo` is already
@@ -86,35 +125,46 @@ loaded (checks the addon name `bamboo` and, with `dlopen(RTLD_NOLOAD)`, a mapped
 loaded after bami it cannot be stopped from here: uninstall or disable one of the
 two. The distro packages declare `Conflicts: fcitx5-bamboo`.
 
-## Honest limits
+## Composition modes and remaining limits
 
-* Edit mode depends on the application sending surrounding text after every change.
-  A late or missing update costs that word (preedit) or, mid-word, the rest of the
-  composition (the typed prefix stays as plain text, no composition is lost on
-  screen, but the tone/mark in progress is not applied). It never deletes on stale data.
-* After a mismatch the context stays preedit until the input context is destroyed.
-* Preedit mode underlines nothing by default, but toolkits decide: GTK and Qt on native
-  Wayland always underline preedit.
-* A focus bounce (focus-out and focus-in in the same event-loop turn, seen on
-  Chromium/X11 and some GNOME apps) keeps an edit-mode syllable; in preedit mode Fcitx
-  itself commits the preedit on focus-out, so the syllable ends there.
-* The first word in a new input context is preedit until the application has sent
-  surrounding text once.
-* Valid-looking English that is also valid Vietnamese typing (`test1.c`) cannot be
-  fixed by the engine; the restore option can wrongly restore loanwords.
-* If the Go core reports an error, bami logs once and passes that key through.
+The [panel profile and session initializer](docs/SESSION.md) address the original
+five limitations with `PreeditOnly=True` and `ClientPreedit=False`. Composition
+appears in Fcitx's panel, needs no surrounding text, does not create application
+preedit underlines, and resumes when the same input context regains focus. The
+first word works without an initial surrounding-text update. Commit the word
+before closing the application; reset/context destruction can cancel it.
+
+For inline/edit mode:
+
+* Safe deletion still requires a fresh, matching surrounding-text update. A
+  startup service or ML prediction cannot supply that acknowledgement.
+* A temporary stale downgrade can recover after the previous edit is verified
+  and a fresh word boundary passes all checks. Confirmed mismatches remain
+  downgraded until an explicit input-method switch or context destruction.
+* Client preedit styling and focus-out commits belong partly to the toolkit.
+  Use panel composition to avoid those client-preedit behaviors.
+* English protection can choose the wrong language on a new ambiguous word;
+  Shift+Backspace overrides it and can teach subsequent uses in that context.
+* If the Go core reports an error, Bami preserves visible preedit where possible,
+  logs once, and passes the key through.
 
 ## Not verified
 
-Edit mode against real applications (GTK, Qt, Chromium, LibreOffice, Wayland
-compositors) has not been exercised yet; tests use a fake application and the Fcitx
-test frontend. Fedora and Arch recipes have not been built. The unit tests cannot
-reproduce real frontend timing.
+GTK4/Qt6 widgets were exercised under headless labwc; the stress tests exposed
+native Wayland timing/focus failures and verified an application-specific Fcitx
+module/preedit fallback. See [docs/LIMITS.md](docs/LIMITS.md) for exact results.
+Chromium, LibreOffice, KWin, GNOME, and Fedora/Arch packages remain unverified.
+Unit tests alone cannot reproduce real frontend timing.
 
 ## Tests
 
-`ctest` runs three programs: `teststrategy` (every row of the strategy table, no
+`ctest` runs five programs: `teststrategy` (every row of the strategy table, no
 Fcitx runtime), `testcomposer` (a fake application drives the real Go core: order of
 delete and commit, xim never deletes, sticky downgrade, selection, stale text,
 terminal, Wayland range, backspace, focus bounce) and `testbami` (the addon in a real
-`fcitx::Instance`: `Tieengs Vieetj ddepj` becomes `Tiếng Việt đẹp`).
+`fcitx::Instance`: `Tieengs Vieetj ddepj` becomes `Tiếng Việt đẹp`) and `testbridge` (C API string ownership, null output
+pointers, invalid/freed handles, and C++ header compatibility). `testsessioninit`
+checks the bounded, read-only session initializer.
+
+The reliability review, fixes, verification results, and remaining work are in
+[`docs/RELIABILITY.md`](docs/RELIABILITY.md).

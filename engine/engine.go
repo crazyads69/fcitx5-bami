@@ -3,6 +3,7 @@ package engine
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	bamboo "github.com/crazyads69/fcitx5-bami/engine/third_party/bamboo-core"
 )
@@ -27,6 +28,9 @@ type Options struct {
 	DdAnywhere  bool // dd -> đ always applies, and AutoRestore keeps a word that holds đ (add -> ađ)
 }
 
+// maxWordKeys bounds one word; 400 'a' keys cost ~10 s in total, 64 cost ~5 ms.
+const maxWordKeys = 64
+
 var quickMap = map[rune]rune{'c': 'h', 'g': 'i', 'k': 'h', 'n': 'g', 'p': 'h', 'q': 'u', 't': 'h'}
 
 // Engine composes one word at a time. It is not safe for concurrent use.
@@ -42,6 +46,8 @@ type Engine struct {
 	appKeys map[rune]bool // keys that type a letter by themselves (MS 1->ă, [ -> ư)
 	shown   string        // preedit last REPORTED to the caller (or acknowledged via AckShown)
 	lastRaw rune          // previous consumed key, lower-cased, for Quick Telex
+	raw     []rune        // input keys before transformations, including Quick Telex
+	escape  bool          // pending VIQR backslash
 }
 
 // New returns an engine; an out-of-range variant falls back to Telex.
@@ -89,12 +95,17 @@ func (e *Engine) Configure(v Variant, o Options) {
 func (e *Engine) Reset() {
 	e.be.Reset()
 	e.shown, e.lastRaw = "", 0
+	e.raw = nil
+	e.escape = false
 }
 
 // Preedit is the current composed word.
 func (e *Engine) Preedit() string {
 	return e.be.GetProcessedString(bamboo.VietnameseMode | bamboo.FullText)
 }
+
+// Raw returns the original keys; after Backspace it describes the remaining edited word.
+func (e *Engine) Raw() string { return string(e.raw) }
 
 // AckShown tells the engine what is really on screen, so the next Edit is relative to reality.
 func (e *Engine) AckShown(s string) { e.shown = s }
@@ -109,6 +120,24 @@ func (e *Engine) edit() Edit {
 // Key feeds one typed rune. consumed=false means the engine ignores it: the caller should Commit the
 // word (if any) and pass the key on. When consumed, Edit turns the last reported preedit into the new one.
 func (e *Engine) Key(r rune) (Edit, bool) {
+	if r < 0x20 || r == 0x7F || !utf8.ValidRune(r) {
+		return Edit{}, false
+	}
+	if len(e.raw) >= maxWordKeys { // bamboo recomputes the word per key (~cubic): bound it, caller commits
+		return Edit{}, false
+	}
+	if e.v == VIQR && (e.escape || r == '\\') {
+		if e.escape {
+			e.be.RemoveLastChar(false) // remove the displayed escape prefix
+			e.escape = false
+		} else {
+			e.escape = true
+		}
+		e.raw = append(e.raw, r)
+		e.be.ProcessKey(r, bamboo.EnglishMode)
+		e.lastRaw = 0
+		return e.edit(), true
+	}
 	lower := unicode.ToLower(r)
 	empty := e.Preedit() == ""
 	literal := false
@@ -120,6 +149,7 @@ func (e *Engine) Key(r rune) (Edit, bool) {
 	case empty && !bamboo.IsAlpha(lower) && !(e.appKeys[lower] && !e.gatedStart(lower)):
 		return Edit{}, false // digits, punctuation and tone keys do nothing at the start of a word
 	}
+	e.raw = append(e.raw, r)
 	switch {
 	case literal:
 		e.be.ProcessKey(r, bamboo.EnglishMode)
@@ -163,7 +193,24 @@ func (e *Engine) Backspace() (Edit, bool) {
 		return Edit{}, false
 	}
 	e.be.RemoveLastChar(true)
+	e.escape = false
+	e.raw = []rune(e.be.GetProcessedString(bamboo.EnglishMode | bamboo.FullText))
 	e.lastRaw = 0
+	return e.edit(), true
+}
+
+// BackspaceRaw removes one displayed English key and rebuilds its Vietnamese alternative.
+func (e *Engine) BackspaceRaw() (Edit, bool) {
+	if len(e.raw) == 0 {
+		return Edit{}, false
+	}
+	keys := append([]rune(nil), e.raw[:len(e.raw)-1]...)
+	shown := e.shown
+	e.Reset()
+	for _, key := range keys {
+		e.Key(key)
+	}
+	e.shown = shown
 	return e.edit(), true
 }
 

@@ -14,7 +14,8 @@
 //    preedit empty; any deleteN/insert it returns is applied before the key is
 //    passed through.
 //  * In preedit mode the text committed at word end is exactly the preedit
-//    bami last showed (rule R5), never a recomputed string.
+//    bami last showed, unless English protection, restore, or the manual override
+//    selects the original keys.
 //
 // Focus bounce (no timer): deactivate() on a focus-out in edit mode does not
 // reset at once; it asks `defer` to run the reset on the NEXT event-loop
@@ -23,6 +24,8 @@
 // cancels the pending reset, so the syllable survives. A real focus loss has no
 // activate before the deferred reset runs, so the word ends. Preedit mode never
 // survives a bounce: Fcitx itself commits the client preedit on focus-out.
+// Panel preedit is retained per context across focus loss and restored on activate;
+// it is never committed later into an unfocused application.
 #ifndef BAMI_COMPOSER_H
 #define BAMI_COMPOSER_H
 
@@ -51,6 +54,8 @@ public:
 
     // Key entry points. Return true when the key was consumed.
     bool onRune(fcitx::InputContext *ic, uint32_t rune);
+    // Commit the other interpretation (English keys / composed Vietnamese).
+    bool onAlternate(fcitx::InputContext *ic);
     bool onBackspace(fcitx::InputContext *ic);
     // A key that is not part of composing (Return, arrows, Ctrl+x ...): commit the
     // preedit if any, end the word. The key itself is passed through by the caller.
@@ -58,7 +63,7 @@ public:
 
     void onReset(fcitx::InputContext *ic);
     void onActivate(fcitx::InputContext *ic);
-    // focusOut: event was InputContextFocusOut (Fcitx already committed the preedit).
+    // focusOut: Fcitx/client may already have committed client preedit; panel words are retained.
     void onDeactivate(fcitx::InputContext *ic, bool focusOut);
     void onSurroundingTextUpdated(fcitx::InputContext *ic);
 

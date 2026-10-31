@@ -14,3 +14,24 @@ jobs:
         with: { go-version: "${{ matrix.go }}" }
       - run: go vet ./... && go test -race -count=1 ./...
       - run: go build -buildmode=c-archive -trimpath -o /tmp/bami-core.a ./bridge
+  addon:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'ubuntu:24.04', 'debian:12']
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential cmake extra-cmake-modules pkg-config golang-go libenchant-2-dev hunspell-en-us \
+            libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev \
+            fcitx5-modules-dev fcitx5-modules fcitx5-data
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+      - name: Verify installation
+        run: DESTDIR="$PWD/stage" cmake --install build

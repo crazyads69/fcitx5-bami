@@ -18,7 +18,6 @@ func Flatten(composition []*Transformation, mode Mode) string {
 
 func getCanvas(composition []*Transformation, mode Mode) []rune {
 	var canvas []rune
-	var appendingMap = map[*Transformation][]*Transformation{}
 	var appendingList []*Transformation
 	for _, trans := range composition {
 		if mode&EnglishMode != 0 {
@@ -33,18 +32,18 @@ func getCanvas(composition []*Transformation, mode Mode) []rune {
 				continue
 			}
 			appendingList = append(appendingList, trans)
-		} else if trans.Target != nil {
-			appendingMap[trans.Target] = append(appendingMap[trans.Target], trans)
 		}
 	}
 	for _, appendingTrans := range appendingList {
 		var chr rune
-		var transList = appendingMap[appendingTrans]
 		if mode&EnglishMode != 0 {
 			chr = appendingTrans.Rule.Key
 		} else {
 			chr = appendingTrans.Rule.EffectOn
-			for _, trans := range transList {
+			for _, trans := range composition {
+				if trans.Target != appendingTrans || trans.Rule.EffectType == Appending {
+					continue
+				}
 				switch trans.Rule.EffectType {
 				case MarkTransformation:
 					if trans.Rule.Effect == uint8(MarkRaw) {

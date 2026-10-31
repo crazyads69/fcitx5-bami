@@ -79,6 +79,11 @@ func (d variantDef) table(loneW, bracket Gate) bamboo.InputMethodDefinition {
 	for k, v := range bamboo.InputMethodDefinitions[d.base] {
 		t[k] = v
 	}
+	if d.base == "Microsoft layout" {
+		for _, pair := range []string{"5%", "6^", "7&", "8*", "9("} {
+			t[pair[1:]] = t[pair[:1]]
+		}
+	}
 	if d.telex && loneW != GateOff {
 		t["w"] += "__Ư" // bare w -> ư when no mark rule applies
 	}

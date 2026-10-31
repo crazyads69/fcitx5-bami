@@ -1,0 +1,36 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Warm the addon in an existing Fcitx session; never launch a second input-method daemon.
+set -eu
+bami_timeout=${BAMI_INIT_TIMEOUT:-10}
+case "$bami_timeout" in ''|*[!0-9]*|???*) echo 'BAMI_INIT_TIMEOUT must be 1..30 seconds' >&2; exit 2;; esac
+if [ "$bami_timeout" -lt 1 ] || [ "$bami_timeout" -gt 30 ]; then
+    echo 'BAMI_INIT_TIMEOUT must be 1..30 seconds' >&2
+    exit 2
+fi
+if ! command -v gdbus >/dev/null 2>&1; then
+    echo 'bami: gdbus is required (GLib command-line tools)' >&2
+    exit 1
+fi
+if ! gdbus wait --session --timeout="$bami_timeout" org.fcitx.Fcitx5; then
+    echo 'bami: Fcitx session bus name did not become ready; start Fcitx through your desktop' >&2
+    exit 1
+fi
+# Pin the current unique owner so a disappearing daemon cannot be D-Bus-activated anew.
+if ! bami_reply=$(gdbus call --session --timeout "$bami_timeout" --dest org.freedesktop.DBus \
+    --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetNameOwner org.fcitx.Fcitx5); then
+    echo 'bami: Fcitx exited before initialization' >&2
+    exit 1
+fi
+bami_owner=$(printf '%s\n' "$bami_reply" | sed -n "s/^('\\(:[0-9][0-9]*\\.[0-9][0-9]*\\)',)$/\\1/p")
+if [ -z "$bami_owner" ]; then
+    echo 'bami: could not identify the current Fcitx bus owner' >&2
+    exit 1
+fi
+if ! gdbus call --session --timeout "$bami_timeout" --dest "$bami_owner" \
+    --object-path /controller --method org.fcitx.Fcitx.Controller1.GetConfig \
+    fcitx://config/addon/bami >/dev/null; then
+    echo 'bami: addon initialization failed; inspect the Fcitx log and addon installation' >&2
+    exit 1
+fi
+printf '%s\n' 'bami: addon initialized (Go runtime, model, and dictionary loader)'

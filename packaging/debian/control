@@ -6,6 +6,8 @@ Build-Depends: debhelper-compat (= 13),
                cmake (>= 3.22),
                extra-cmake-modules,
                pkg-config,
+               libenchant-2-dev,
+               hunspell-en-us,
                golang-go (>= 2:1.18~),
                libfcitx5core-dev (>= 5.0.14),
                libfcitx5config-dev,
@@ -19,7 +21,7 @@ Rules-Requires-Root: no
 
 Package: fcitx5-bami
 Architecture: any
-Depends: fcitx5 (>= 5.0.14), ${shlibs:Depends}, ${misc:Depends}
+Depends: fcitx5 (>= 5.0.14), libglib2.0-bin, hunspell-en-us, ${shlibs:Depends}, ${misc:Depends}
 Conflicts: fcitx5-bamboo
 Description: Vietnamese input method for Fcitx 5 (Telex, VNI, VIQR)
  Bami types Vietnamese with Telex variants, VNI, VIQR and the MS layout. It

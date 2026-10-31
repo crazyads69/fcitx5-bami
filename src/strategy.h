@@ -10,6 +10,7 @@
 #define BAMI_STRATEGY_H
 
 #include <string>
+#include <string_view>
 
 namespace bami {
 
@@ -29,6 +30,7 @@ enum class Mode { Preedit, Edit };
 
 enum class Reason {
     Ok,           // Edit allowed
+    ConfiguredPreedit, // user explicitly disabled surrounding-text edits
     Xim,          // frontend is XIM
     Terminal,     // Terminal capability flag: surrounding text never exists
     Sticky,       // an earlier mismatch marked this context unreliable
@@ -39,7 +41,7 @@ enum class Reason {
     TextMismatch, // text before the cursor does not end with what we committed
     CursorMismatch, // cursor != recorded cursor + our delta
     NotBoundary,  // character before the syllable is not a word boundary
-    Range,        // Wayland: delete cannot be proven to convert correctly
+    Range,        // cursor outside cached text, or Wayland byte limit reached
 };
 
 struct StrategyInput {
@@ -47,7 +49,8 @@ struct StrategyInput {
     bool terminal = false;           // CapabilityFlag::Terminal
     bool surroundingFlag = false;    // CapabilityFlag::SurroundingText
     bool textValid = false;          // ic->surroundingText().isValid()
-    std::string text;                // cached surrounding text, UTF-8
+    std::string text;                // cached surrounding text, UTF-8 (tests)
+    const std::string *textRef = nullptr; // preferred: points at the IC's own cache, no per-key copy
     unsigned cursor = 0;             // in code points (Fcitx unit)
     unsigned anchor = 0;
     // Text bami has put in the application for the current word. Empty means
@@ -56,28 +59,32 @@ struct StrategyInput {
     bool updatedSinceEdit = false;   // SurroundingTextUpdated seen since last edit
     bool haveExpectedCursor = false; // recorded cursor + delta is known
     unsigned expectedCursor = 0;
-    bool sticky = false;             // context already marked unreliable
+    bool sticky = false;             // unreliable until verified recovery or explicit IM switch
 };
 
 struct Decision {
     Mode mode = Mode::Preedit;
     Reason reason = Reason::Ok;
     // True when the mismatch proves the application's text is not what bami
-    // believes: the caller must stop editing for this context for good.
+    // believes: stop editing until the caller has evidence for recovery.
     bool makeSticky = false;
 };
 
 Decision decide(const StrategyInput &in);
 
 // Helpers exposed for tests / composer.
-size_t utf8Length(const std::string &s);            // code points
-std::string utf8Prefix(const std::string &s, size_t codePoints);
-bool endsWith(const std::string &s, const std::string &suffix);
-bool isWordBoundaryBefore(const std::string &text, size_t byteEnd);
+size_t utf8Length(std::string_view s);            // code points
+std::string utf8Prefix(std::string_view s, size_t codePoints);
+bool endsWith(std::string_view s, std::string_view suffix);
+bool isWordBoundaryBefore(std::string_view text, size_t byteEnd);
 
 // Wayland text-input v3 caps surrounding text at 4000 bytes; a text at or over
 // the cap may be a truncated window whose cursor offsets we cannot trust.
 constexpr size_t kWaylandMaxText = 4000;
+
+// Every key of an edit-mode word verifies the text before the cursor, which costs O(bytes).
+// Qt caps its text at 4096 chars (<= 12 KiB); beyond this bound the word is composed in preedit.
+constexpr size_t kMaxVerifyBytes = 32 * 1024;
 
 } // namespace bami
 

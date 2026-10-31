@@ -1,0 +1,42 @@
+{
+  "model": "hashed character 2/3/4-gram logistic regression",
+  "seed": 7,
+  "dimensions": 4096,
+  "word_length": [
+    4,
+    32
+  ],
+  "score_is_calibrated_intent_probability": false,
+  "training_examples": 56655,
+  "excluded_ambiguous_spellings": 237,
+  "threshold": 0.800000011920929,
+  "validation": {
+    "english_examples": 4432,
+    "vietnamese_examples": 2627,
+    "english_detection_rate": 0.7978339350180506,
+    "vietnamese_false_english_rate": 0.00038066235249333843
+  },
+  "test": {
+    "english_examples": 4352,
+    "vietnamese_examples": 2751,
+    "english_detection_rate": 0.7920496323529411,
+    "vietnamese_false_english_rate": 0.0
+  },
+  "english_sha256": "36efe178f2cc05648a3c2746c1b202d2d09d3f7fa52dba124be92b97ca21b704",
+  "vietnamese_sha256": "f1debda14aa01460cd3ce8e91136107272381f05209e70b4003087e378a2b089",
+  "probes": {
+    "typescript": 0.8301486998870169,
+    "javascript": 0.8268459388944581,
+    "webpack": 0.8566015007997405,
+    "localhost": 0.9010840651572873,
+    "kubernetes": 0.8053817363157459,
+    "nginx": 0.11662568159977643,
+    "access": 0.8136895751346332,
+    "vieetj": 0.06689510197421644,
+    "tieengs": 0.03259674832450588,
+    "nguwowif": 0.038193346914958105,
+    "ddaays": 0.08886751651379181,
+    "hoaf": 0.12915355550213464
+  },
+  "model_sha256": "a32fd535235a608c806057fca02f39966377173c159af9d0a66905c317c76141"
+}

@@ -21,7 +21,10 @@ struct Rig {
     Composer composer{mgr, [this](std::function<void()> f) { deferred.push_back(std::move(f)); }};
     std::unique_ptr<FakeIC> ic;
 
-    Rig(const char *frontend, bool surrounding = true) {
+    Rig(const char *frontend, bool surrounding = true, bool english = false) {
+        BamiConfig cfg;
+        cfg.protectEnglish.setValue(english);
+        composer.setConfig(cfg);
         ic.reset(new FakeIC(mgr, frontend));
         fcitx::CapabilityFlags f{CapabilityFlag::Preedit};
         if (surrounding) f |= CapabilityFlag::SurroundingText;
@@ -124,9 +127,22 @@ int main() {
         CHECK(r.ic->deletes() == 0);
         r.sync();
         r.type(" ");                       // flush
-        // After the sticky downgrade a new word is preedit even with perfect sync.
+        // A fresh boundary after a transient stale update allows a new word to retry.
         r.ic->clearLog();
         r.type("aa");
+        CHECK(r.composer.wordMode(r.ic.get()) == Mode::Edit);
+        CHECK(!r.composer.sticky(r.ic.get()));
+    }
+    // A stale update can conceal a rejected delete; that context must stay downgraded.
+    {
+        Rig r("dbus");
+        r.ic->rejectDelete = true;
+        r.type("a"); r.key('a', false); r.key('s', false);
+        r.sync(); // reveals that the previous delete did not happen
+        r.type(" ");
+        r.ic->clearLog();
+        r.type("aa");
+        CHECK(r.composer.sticky(r.ic.get()));
         CHECK(r.composer.wordMode(r.ic.get()) == Mode::Preedit);
         CHECK(r.ic->deletes() == 0);
     }
@@ -212,6 +228,205 @@ int main() {
         r.type(" ");
         CHECK_EQ(r.ic->appText(), "windows ");
         CHECK(r.ic->deletes() <= 1); // the restore at word end: one delete, then the commit
+    }
+    // Deleting the whole preedit must not commit the character just removed.
+    for (const char *fe : {"dbus", "xim"}) {
+        Rig r(fe);
+        r.type("aa");
+        r.bs();
+        CHECK_EQ(r.ic->appText(), "");
+        CHECK(r.ic->preedit.empty());
+        CHECK(!r.composer.wordActive(r.ic.get()));
+        r.type("b ");
+        CHECK_EQ(r.ic->appText(), "b ");
+    }
+    // Applying settings mid-word preserves the text, then starts a fresh word.
+    for (const char *fe : {"dbus", "xim"}) {
+        Rig r(fe);
+        r.type("aa");
+        BamiConfig cfg;
+        cfg.variant.setValue(Variant::VNI);
+        r.composer.setConfig(cfg);
+        r.type("e6 ");
+        CHECK_EQ(r.ic->appText(), "âê ");
+        CHECK(r.ic->preedit.empty());
+    }
+    // Return/arrows/shortcuts must finish words with the same restore policy as space.
+    for (const char *fe : {"dbus", "xim"}) {
+        Rig r(fe);
+        BamiConfig cfg;
+        cfg.restore.setValue(true);
+        r.composer.setConfig(cfg);
+        r.type("windows");
+        r.composer.onFlush(r.ic.get());
+        CHECK_EQ(r.ic->appText(), "windows");
+        CHECK(r.ic->preedit.empty());
+        CHECK(!r.composer.wordActive(r.ic.get()));
+    }
+    // English and Vietnamese can share keys: normal endings prefer dictionary English.
+    for (const char *fe : {"dbus", "xim", "wayland_v2"}) {
+        for (const std::string word : {"as", "is", "of", "or", "has", "test", "windows", "Windows"}) {
+            Rig r(fe, true, true);
+            r.type(word + " ");
+            CHECK_EQ(r.ic->appText(), word + " ");
+        }
+        Rig r(fe, true, true);
+        r.type("as");
+        CHECK(r.composer.onAlternate(r.ic.get()));
+        CHECK_EQ(r.ic->appText(), "á");
+        CHECK(!r.composer.wordActive(r.ic.get()));
+        r.sync();
+        r.type(" ");
+        r.type("vieetj");
+        CHECK(r.composer.onAlternate(r.ic.get()));
+        CHECK_EQ(r.ic->appText(), "á vieetj");
+        CHECK(r.ic->preedit.empty());
+        CHECK(!r.composer.onAlternate(r.ic.get()));
+        if (std::string(fe) == "xim") CHECK(r.ic->deletes() == 0);
+    }
+    // English protection also applies on non-printing keys and switching IM.
+    for (const char *fe : {"dbus", "xim"}) {
+        Rig r(fe, true, true);
+        r.type("test");
+        r.composer.onFlush(r.ic.get());
+        CHECK_EQ(r.ic->appText(), "test");
+        r.sync(); r.type(" as");
+        r.composer.onDeactivate(r.ic.get(), false);
+        CHECK_EQ(r.ic->appText(), "test as");
+    }
+    // Disabled or missing dictionaries retain the old behavior and allow manual recovery.
+    for (bool disabled : {false, true}) {
+        Rig r("xim");
+        BamiConfig cfg;
+        cfg.protectEnglish.setValue(!disabled);
+        cfg.englishDictionary.setValue("bami_missing_dictionary");
+        r.composer.setConfig(cfg);
+        r.type("as ");
+        CHECK_EQ(r.ic->appText(), "á ");
+        r.type("as");
+        CHECK(r.composer.onAlternate(r.ic.get()));
+        CHECK_EQ(r.ic->appText(), "á as");
+    }
+    // Local ML remains available without a dictionary, and can be disabled independently.
+    for (const char *fe : {"dbus", "xim"}) {
+        Rig r(fe, true, true);
+        BamiConfig cfg;
+        cfg.englishDictionary.setValue("bami_missing_dictionary");
+        r.composer.setConfig(cfg);
+        r.type("typescript ");
+        CHECK_EQ(r.ic->appText(), "typescript ");
+        cfg.englishModel.setValue(false);
+        r.composer.setConfig(cfg);
+        r.type("typescript ");
+        CHECK(r.ic->appText() != "typescript typescript ");
+    }
+    // Do not treat dd (English abbreviation) as English; it is the Telex key for đ.
+    {
+        Rig r("xim", true, true); r.type("dd "); CHECK_EQ(r.ic->appText(), "đ ");
+    }
+    // A stale or moved edit word cannot be rewritten even by the override shortcut.
+    {
+        Rig r("dbus");
+        r.type("as", false);
+        r.ic->clearLog();
+        CHECK(r.composer.onAlternate(r.ic.get()));
+        CHECK(r.ic->deletes() == 0);
+    }
+    // The displayed language is the committed language, even before a word boundary.
+    for (const char *fe : {"xim", "dbus", "wayland_v2"}) {
+        Rig r(fe, true, true);
+        r.type("as");
+        if (std::string(fe) == "xim") CHECK_EQ(r.ic->preedit, "as");
+        else CHECK_EQ(r.ic->appText(), "as");
+        r.bs();
+        if (std::string(fe) == "xim") CHECK_EQ(r.ic->preedit, "a");
+        else CHECK_EQ(r.ic->appText(), "a");
+        r.bs();
+        CHECK_EQ(r.ic->appText(), "");
+        CHECK(r.ic->preedit.empty());
+    }
+    // Explicit overrides teach this context; another context keeps the default.
+    {
+        Rig r("xim", true, true), other("xim", true, true);
+        r.type("as"); r.composer.onAlternate(r.ic.get());
+        r.type(" as ");
+        CHECK_EQ(r.ic->appText(), "á á ");
+        other.type("as "); CHECK_EQ(other.ic->appText(), "as ");
+        r.type("as"); r.composer.onAlternate(r.ic.get());
+        r.type(" as ");
+        CHECK_EQ(r.ic->appText(), "á á as as ");
+        BamiConfig cfg;
+        cfg.learnCorrections.setValue(false);
+        r.composer.setConfig(cfg);
+        r.type("as"); r.composer.onAlternate(r.ic.get()); r.type(" as ");
+        CHECK_EQ(r.ic->appText(), "á á as as á as ");
+    }
+    // A correction fixes a real low-score technical name on subsequent uses.
+    for (const char *fe : {"xim", "dbus"}) {
+        Rig r(fe, true, true);
+        BamiConfig cfg;
+        cfg.englishDictionary.setValue("bami_missing_dictionary");
+        r.composer.setConfig(cfg);
+        r.type("nginx"); r.composer.onAlternate(r.ic.get());
+        r.sync(); r.type(" nginx ");
+        CHECK_EQ(r.ic->appText(), "nginx nginx ");
+    }
+    // A long common prefix still restores in one bounded delete before commit.
+    {
+        Rig r("dbus");
+        std::string keys = std::string(256, 'b') + "as";
+        r.type(keys);
+        r.ic->clearLog();
+        CHECK(r.composer.onAlternate(r.ic.get()));
+        CHECK_EQ(r.ic->appText(), keys);
+        CHECK(r.ic->deletes() <= 1);
+    }
+    // Explicit preedit-only policy forbids deletion even with healthy surrounding text.
+    {
+        Rig r("dbus", true, true);
+        BamiConfig cfg;
+        cfg.preeditOnly.setValue(true);
+        r.composer.setConfig(cfg);
+        r.type("vieetj as ");
+        CHECK_EQ(r.ic->appText(), "việt as ");
+        CHECK(r.ic->deletes() == 0);
+        CHECK(r.composer.lastReason(r.ic.get()) == Reason::ConfiguredPreedit);
+    }
+    // Panel composition needs no surrounding text, does not underline the client,
+    // and survives focus loss without committing into a different field.
+    {
+        Rig r("wayland_v2", false);
+        BamiConfig cfg;
+        cfg.preeditOnly.setValue(true);
+        cfg.clientPreedit.setValue(false);
+        r.composer.setConfig(cfg);
+        r.ic->surroundingText().invalidate();
+        r.type("Tieeng", false);
+        CHECK(r.ic->inputPanel().clientPreedit().empty());
+        CHECK_EQ(r.ic->inputPanel().preedit().toString(), "Tiêng");
+        r.composer.onDeactivate(r.ic.get(), true);
+        r.runDeferred();
+        CHECK(r.composer.wordActive(r.ic.get()));
+        CHECK_EQ(r.ic->appText(), "");
+        r.composer.onActivate(r.ic.get());
+        CHECK_EQ(r.ic->inputPanel().preedit().toString(), "Tiêng");
+        r.type("s ", false);
+        CHECK_EQ(r.ic->appText(), "Tiếng ");
+        CHECK(r.ic->deletes() == 0);
+    }
+    // A confirmed text mismatch must not recover just because fresh text arrived.
+    {
+        Rig r("dbus");
+        r.type("aa");
+        r.ic->text = U"other "; r.ic->cursor = 6; r.sync();
+        r.type("s "); r.type("aa");
+        CHECK(r.composer.sticky(r.ic.get()));
+        CHECK(r.composer.wordMode(r.ic.get()) == Mode::Preedit);
+        r.composer.onDeactivate(r.ic.get(), false);
+        r.composer.onActivate(r.ic.get());
+        CHECK(!r.composer.sticky(r.ic.get()));
+        CHECK(r.composer.onRune(r.ic.get(), 'a'));
+        CHECK(r.composer.wordMode(r.ic.get()) == Mode::Preedit); // fresh update still required
     }
     std::printf("testcomposer: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

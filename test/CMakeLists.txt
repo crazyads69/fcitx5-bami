@@ -31,3 +31,11 @@ target_include_directories(testbami PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(testbami Fcitx5::Core Fcitx5::Utils Fcitx5::Module::TestFrontend)
 add_dependencies(testbami bami)
 add_test(NAME testbami COMMAND testbami)
+
+# C ABI ownership, error containment, and generated-header compatibility.
+add_executable(testbridge testbridge.cpp)
+target_link_libraries(testbridge Bami::Core)
+add_test(NAME testbridge COMMAND testbridge)
+
+add_test(NAME testsessioninit COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/testsessioninit.sh
+  ${CMAKE_SOURCE_DIR}/tools/fcitx5-bami-init)
